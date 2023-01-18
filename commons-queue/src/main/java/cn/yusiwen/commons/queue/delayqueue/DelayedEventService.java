@@ -1,4 +1,4 @@
-package cn.yusiwen.commons.queue.rqueue;
+package cn.yusiwen.commons.queue.delayqueue;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
@@ -28,10 +28,10 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.yusiwen.commons.queue.rqueue.context.EventContextHandler;
-import cn.yusiwen.commons.queue.rqueue.context.NoopEventContextHandler;
-import cn.yusiwen.commons.queue.rqueue.metrics.Metrics;
-import cn.yusiwen.commons.queue.rqueue.metrics.NoopMetrics;
+import cn.yusiwen.commons.queue.delayqueue.context.EventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.context.NoopEventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.metrics.Metrics;
+import cn.yusiwen.commons.queue.delayqueue.metrics.NoopMetrics;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.Limit;
@@ -109,7 +109,6 @@ public class DelayedEventService implements Closeable {
 
         private Builder() {}
 
-        @NotNull
         public Builder mapper(@NotNull ObjectMapper val) {
             mapper = val;
             return this;
@@ -125,7 +124,7 @@ public class DelayedEventService implements Closeable {
             return this;
         }
 
-        Builder enableScheduling(boolean val) {
+        public Builder enableScheduling(boolean val) {
             enableScheduling = val;
             return this;
         }
@@ -212,7 +211,7 @@ public class DelayedEventService implements Closeable {
     private static final Logger LOG = LoggerFactory.getLogger(DelayedEventService.class);
 
     /**
-     * Subscription
+     * Subscriptions map
      */
     private final Map<Class<? extends Event>, HandlerAndSubscription<? extends Event>> subscriptions =
         new ConcurrentHashMap<>();
@@ -259,7 +258,7 @@ public class DelayedEventService implements Closeable {
      */
     private final Scheduler single = Schedulers.newSingle("redis-single");
     /**
-     * RedisClient
+     * Scheduler thread pool
      */
     private final ScheduledThreadPoolExecutor dispatcherExecutor =
         new ScheduledThreadPoolExecutor(1, new ThreadFactory() {
@@ -433,6 +432,7 @@ public class DelayedEventService implements Closeable {
                 Range.create(-1, System.currentTimeMillis()), schedulingBatchSize);
 
             if (null == tasksForExecution) {
+                LOG.debug("found no task to execute");
                 return;
             }
 

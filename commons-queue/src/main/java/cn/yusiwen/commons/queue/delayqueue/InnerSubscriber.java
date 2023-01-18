@@ -1,4 +1,4 @@
-package cn.yusiwen.commons.queue.rqueue;
+package cn.yusiwen.commons.queue.delayqueue;
 
 import static java.lang.Boolean.TRUE;
 
@@ -9,7 +9,7 @@ import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.yusiwen.commons.queue.rqueue.context.EventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.context.EventContextHandler;
 import io.lettuce.core.TransactionResult;
 import io.lettuce.core.api.StatefulRedisConnection;
 import reactor.core.publisher.BaseSubscriber;
@@ -51,11 +51,11 @@ class InnerSubscriber<T extends Event> extends BaseSubscriber<EventEnvelope<T>> 
     /**
      * Delete command
      */
-    private final Function<Event, Mono<TransactionResult>> deleteCommand;
+    private final Function<T, Mono<TransactionResult>> deleteCommand;
 
     InnerSubscriber(EventContextHandler contextHandler, Function<T, Mono<Boolean>> handler, int parallelism,
         StatefulRedisConnection<String, String> pollingConnection, Scheduler handlerScheduler,
-        Function<Event, Mono<TransactionResult>> deleteCommand) {
+        Function<T, Mono<TransactionResult>> deleteCommand) {
         this.contextHandler = contextHandler;
         this.handler = handler;
         this.parallelism = parallelism;

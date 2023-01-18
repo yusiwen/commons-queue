@@ -1,4 +1,4 @@
-package cn.yusiwen.commons.queue.rqueue;
+package cn.yusiwen.commons.queue.delayqueue;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;

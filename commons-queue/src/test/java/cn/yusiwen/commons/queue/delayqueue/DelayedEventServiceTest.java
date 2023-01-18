@@ -1,11 +1,11 @@
-package cn.yusiwen.commons.queue.rqueue;
+package cn.yusiwen.commons.queue.delayqueue;
 
 import static java.util.Collections.singletonMap;
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.toList;
 
-import static cn.yusiwen.commons.queue.rqueue.DelayedEventService.delayedEventService;
+import static cn.yusiwen.commons.queue.delayqueue.DelayedEventService.delayedEventService;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -35,8 +35,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
-import cn.yusiwen.commons.queue.rqueue.context.DefaultEventContextHandler;
-import cn.yusiwen.commons.queue.rqueue.metrics.NoopMetrics;
+import cn.yusiwen.commons.queue.delayqueue.context.DefaultEventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.metrics.NoopMetrics;
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
 import io.lettuce.core.ClientOptions;

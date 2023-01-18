@@ -1,8 +1,8 @@
-package cn.yusiwen.commons.queue.rqueue.metrics;
+package cn.yusiwen.commons.queue.delayqueue.metrics;
 
 import java.util.function.Supplier;
 
-import cn.yusiwen.commons.queue.rqueue.Event;
+import cn.yusiwen.commons.queue.delayqueue.Event;
 
 /**
  * @author Siwen Yu

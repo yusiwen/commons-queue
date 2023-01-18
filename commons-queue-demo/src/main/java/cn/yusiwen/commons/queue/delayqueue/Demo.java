@@ -1,9 +1,8 @@
-package cn.yusiwen.commons.queue.rqueue;
+package cn.yusiwen.commons.queue.delayqueue;
 
 import static java.lang.Boolean.TRUE;
-import static java.util.concurrent.TimeUnit.HOURS;
 
-import static cn.yusiwen.commons.queue.rqueue.DelayedEventService.delayedEventService;
+import static cn.yusiwen.commons.queue.delayqueue.DelayedEventService.delayedEventService;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,13 +11,18 @@ import java.beans.ConstructorProperties;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.yusiwen.commons.queue.rqueue.context.DefaultEventContextHandler;
-import cn.yusiwen.commons.queue.rqueue.metrics.NoopMetrics;
+import cn.yusiwen.commons.queue.delayqueue.context.DefaultEventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.metrics.NoopMetrics;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.lettuce.core.RedisClient;
 import reactor.core.publisher.Mono;
@@ -78,11 +82,6 @@ public class Demo {
     private static final Duration POLLING_TIMEOUT = Duration.ofSeconds(1);
 
     /**
-     * Demo
-     */
-    private static Demo demo = new Demo();
-
-    /**
      * ObjectMapper
      */
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -90,8 +89,19 @@ public class Demo {
     /**
      * Thread pool
      */
-    @SuppressWarnings("PMD.ThreadPoolCreationRule")
-    private final ExecutorService executor = Executors.newFixedThreadPool(10);
+    private final ExecutorService executor =
+        new ThreadPoolExecutor(10, 10, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), new ThreadFactory() {
+
+            /**
+             * Thread number
+             */
+            final AtomicInteger threadNumber = new AtomicInteger(1);
+
+            @Override
+            public Thread newThread(@NotNull Runnable r) {
+                return new Thread(r, "handler" + threadNumber.getAndIncrement());
+            }
+        });
 
     /**
      * RedisClient
@@ -106,10 +116,10 @@ public class Demo {
     public void init() {
         redisClient = RedisClient.create("redis://192.168.3.1:6379");
         eventService = delayedEventService().client(redisClient).mapper(objectMapper)
-            .handlerScheduler(Schedulers.fromExecutorService(executor)).schedulingInterval(Duration.ofSeconds(1))
-            .schedulingBatchSize(SCHEDULING_BATCH_SIZE).enableScheduling(false).pollingTimeout(POLLING_TIMEOUT)
-            .eventContextHandler(new DefaultEventContextHandler()).dataSetPrefix("").retryAttempts(10)
-            .metrics(new NoopMetrics()).refreshSubscriptionsInterval(Duration.ofMinutes(5)).build();
+            .handlerScheduler(Schedulers.fromExecutorService(executor)).enableScheduling(true)
+            .schedulingInterval(Duration.ofSeconds(1)).schedulingBatchSize(SCHEDULING_BATCH_SIZE)
+            .pollingTimeout(POLLING_TIMEOUT).eventContextHandler(new DefaultEventContextHandler()).dataSetPrefix("")
+            .retryAttempts(10).metrics(new NoopMetrics()).refreshSubscriptionsInterval(Duration.ofMinutes(5)).build();
     }
 
     public void shutdown() {
@@ -119,24 +129,22 @@ public class Demo {
 
     public void start() {
         eventService.addHandler(DemoEvent.class, e -> Mono.fromCallable(() -> {
-            LOG.info("DemoEvent received");
+            LOG.info("DemoEvent received, id = {}", e.getId());
             return TRUE;
         }), 1);
+        LOG.info("DemoEvent1 enqueue");
         eventService.enqueue(new DemoEvent("1"), Duration.ofSeconds(10)).subscribe();
-        eventService.dispatchDelayedMessages();
+        LOG.info("DemoEvent2 enqueue");
+        eventService.enqueue(new DemoEvent("2"), Duration.ofSeconds(10)).subscribe();
+        LOG.info("DemoEvent3 enqueue");
+        eventService.enqueue(new DemoEvent("3"), Duration.ofSeconds(10)).subscribe();
     }
 
     public static void main(String[] args) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> demo.shutdown()));
+        Demo demo = new Demo();
+        Runtime.getRuntime().addShutdownHook(new Thread(demo::shutdown));
         demo.init();
         demo.start();
-
-        while (true) {
-            try {
-                HOURS.sleep(1);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
+        LOG.info("main exited");
     }
 }
