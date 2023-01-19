@@ -9,7 +9,7 @@ import reactor.core.publisher.Mono;
 
 /**
  * DelayQueue
- *
+ * <p>
  * Interface of delay queue
  *
  * @author Siwen Yu
@@ -20,8 +20,8 @@ public interface DelayQueue {
     /**
      * Add task handler
      * <p>
-     * A task handler is a {@code Function} receives a {@code Task} and
-     * returns a {@code Mono<Boolean>} which indicates the handler execution status
+     * A task handler is a {@code Function} receives a {@code Task} and returns a {@code Mono<Boolean>} which indicates
+     * the handler execution status
      *
      * @param taskType Task class
      * @param handler Task handler
