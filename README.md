@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/yusiwen/commons-queue/graphs/commit-activity)
 [![GitHub tag](https://img.shields.io/github/tag/yusiwen/commons-queue.svg)](https://GitHub.com/yusiwen/commons-queue/tags/)
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/cn.yusiwen/commons-queue/badge.svg)](https://maven-badges.herokuapp.com/maven-central/cn.yusiwen/commons-queue)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/cn.yusiwen.commons/commons-queue/badge.svg)](https://maven-badges.herokuapp.com/maven-central/cn.yusiwen.commons/commons-queue)
 
 My common queue library implements queue operations. 
 
