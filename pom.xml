@@ -4,7 +4,7 @@
     <parent>
         <groupId>cn.yusiwen</groupId>
         <artifactId>java-base-parent</artifactId>
-        <version>15.2.3</version>
+        <version>15.3</version>
         <relativePath/>
         <!-- lookup parent from repository -->
     </parent>
@@ -25,10 +25,25 @@
             <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
         </license>
     </licenses>
+    <developers>
+        <developer>
+            <id>yusiwen</id>
+            <name>Siwen Yu</name>
+            <email>yusiwen@gmail.com</email>
+        </developer>
+    </developers>
+    <issueManagement>
+        <system>Github</system>
+        <url>https://github.com/yusiwen/commons-queue/issues</url>
+    </issueManagement>
+    <ciManagement>
+        <system>travis-ci</system>
+        <url>https://travis-ci.org/yusiwen/commons-queue</url>
+    </ciManagement>
     <scm>
         <connection>scm:git:ssh://git@github.com/yusiwen/commons-queue.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/yusiwen/commons-queue.git</developerConnection>
         <url>https://github.com/yusiwen/java-base-parent</url>
-        <tag>v15.2.1</tag>
+        <tag>HEAD</tag>
     </scm>
 </project>
