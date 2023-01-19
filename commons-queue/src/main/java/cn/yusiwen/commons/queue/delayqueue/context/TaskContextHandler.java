@@ -18,14 +18,14 @@ public interface TaskContextHandler {
      * Extract an task context from a subscription context at the enqueue stage
      *
      * @param subscriptionContext Context
-     * @return Map<String, String>
+     * @return {@code Map<String, String>}
      */
     Map<String, String> taskContext(Context subscriptionContext);
 
     /**
      * Add an task context to a subscription context before passing an event to a handler
      *
-     * @param taskContext Map<String, String>
+     * @param taskContext {@code Map<String, String>}
      * @param originalSubscriptionContext Context
      * @return Context
      */
