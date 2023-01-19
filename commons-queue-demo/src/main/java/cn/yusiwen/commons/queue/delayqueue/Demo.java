@@ -135,9 +135,9 @@ public class Demo {
         LOG.info("DemoEvent1 enqueue");
         eventService.enqueue(new DemoTask("1"), Duration.ofSeconds(10)).subscribe();
         LOG.info("DemoEvent2 enqueue");
-        eventService.enqueue(new DemoTask("2"), Duration.ofSeconds(10)).subscribe();
+        eventService.enqueue(new DemoTask("2"), Duration.ofSeconds(15)).subscribe();
         LOG.info("DemoEvent3 enqueue");
-        eventService.enqueue(new DemoTask("3"), Duration.ofSeconds(10)).subscribe();
+        eventService.enqueue(new DemoTask("3"), Duration.ofSeconds(20)).subscribe();
     }
 
     public static void main(String[] args) {
