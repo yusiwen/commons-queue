@@ -494,7 +494,7 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
                 pollingConnection.reset();
             }).onErrorReturn(KeyValue.empty(taskType.getName())), 1, // it doesn't make sense to do requests on single
                                                                      // connection in parallel
-                    prefetch)
+                prefetch)
             .publishOn(handlerScheduler, prefetch).defaultIfEmpty(KeyValue.empty(queue)).filter(Value::hasValue)
             .doOnNext(v -> metrics.incrementDequeueCounter(taskType)).map(Value::getValue)
             .map(v -> deserialize(taskType, v)).onErrorContinue((e, r) -> LOG.warn("Unable to deserialize [{}]", r, e))
