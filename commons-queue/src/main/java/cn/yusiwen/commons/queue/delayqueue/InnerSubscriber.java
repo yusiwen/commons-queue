@@ -17,7 +17,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
 /**
- * Helper class to handle the subscription of
+ * Helper class to handle the subscription of tasks
  *
  * @author Siwen Yu
  * @since 1.0.0
