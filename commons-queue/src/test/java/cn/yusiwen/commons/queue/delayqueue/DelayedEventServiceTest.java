@@ -217,7 +217,7 @@ class DelayedEventServiceTest {
 
         assertEventsCount(total);
         // when
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         // then
         waitAndAssertEventsCount(0L);
     }
@@ -237,7 +237,7 @@ class DelayedEventServiceTest {
         enqueue(total).block();
         assertEventsCount(total);
         // when
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         // then
         waitAndAssertEventsCount(total - prefetch);
     }
@@ -254,7 +254,7 @@ class DelayedEventServiceTest {
         // and events are queued with context
         enqueue(1).subscriberContext(ctx -> ctx.put("eventContext", singletonMap("key", contextValue))).block();
         // when
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         // then
         waitAndAssertEventsCount(0);
         assertThat(holder.get(), equalTo(contextValue));
@@ -281,7 +281,7 @@ class DelayedEventServiceTest {
         enqueue(total).block();
         assertEventsCount(total);
         // when
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         // then task execution takes 500, 20 should complete in 1000 (with parallelism of 10), 100 ms as reserve
         assertThat(latch.await(total / parallelism * timeout + 100, MILLISECONDS), equalTo(true));
     }
@@ -305,7 +305,7 @@ class DelayedEventServiceTest {
         waitAndAssertEventsCount(total);
         // and a malformed event is placed in the beginning of a list
         connection.lpush(toQueueName(DummyEvent.class), "[unserializable}");
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         // and all events are moved to list
         assertThat(connection.llen(toQueueName(DummyEvent.class)), equalTo((long)total + 1));
         // when
@@ -331,7 +331,7 @@ class DelayedEventServiceTest {
         // then new event is handled
         enqueue(1).block();
         assertEventsCount(1L);
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         waitAndAssertEventsCount(0L);
     }
 
@@ -345,7 +345,7 @@ class DelayedEventServiceTest {
         enqueue(1).block();
         assertEventsCount(1L);
         // then
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         waitAndAssertEventsCount(0L);
     }
 
@@ -360,7 +360,7 @@ class DelayedEventServiceTest {
     void shouldFailToDispatchIfConnectionNotAvailable() throws IOException {
         redisProxy.delete();
 
-        assertThrows(RedisCommandTimeoutException.class, () -> eventService.dispatchDelayedMessages());
+        assertThrows(RedisCommandTimeoutException.class, () -> eventService.dispatchDelayedEvents());
     }
 
     @Test
@@ -393,7 +393,7 @@ class DelayedEventServiceTest {
         enqueue(total).block();
         waitAndAssertEventsCount(total);
         // when
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         // then only valid events are handled
         waitAndAssertEventsCount(total - 1);
     }
@@ -406,7 +406,7 @@ class DelayedEventServiceTest {
 
         double initialScore = connection.zscore(DELAYED_QUEUE, DelayedEventService.getKey(event));
         // when
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         double postDispatchScore = connection.zscore(DELAYED_QUEUE, DelayedEventService.getKey(event));
         // then the post dispatch score is 10 sec ahead
         assertThat(postDispatchScore - initialScore, greaterThan(10000.0));
@@ -422,7 +422,7 @@ class DelayedEventServiceTest {
         assertEventsCount(total);
         long maxScore = System.currentTimeMillis();
         // when
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         // then only SCHEDULING_BATCH_SIZE are rescheduled
         assertThat(connection.zcount(DELAYED_QUEUE, Range.create(0, maxScore)), equalTo((long)extra));
     }
@@ -444,7 +444,7 @@ class DelayedEventServiceTest {
         eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 1);
         // and events are enqueued
         enqueue(10).block();
-        eventService.dispatchDelayedMessages();
+        eventService.dispatchDelayedEvents();
         waitAndAssertEventsCount(0L);
         // when
         assertThat(eventService.removeHandler(DummyEvent.class), equalTo(true));

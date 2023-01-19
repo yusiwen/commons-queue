@@ -56,6 +56,9 @@ import reactor.core.scheduler.Schedulers;
  */
 public class DelayedEventService implements Closeable {
 
+    /**
+     * Builder for DelayedEventService
+     */
     public static final class Builder {
         /**
          * RedisClient
@@ -174,6 +177,11 @@ public class DelayedEventService implements Closeable {
         }
     }
 
+    /**
+     * Handler and subscription, for event handlers management
+     *
+     * @param <T> Event
+     */
     private static class HandlerAndSubscription<T extends Event> {
         /**
          * Class
@@ -211,7 +219,7 @@ public class DelayedEventService implements Closeable {
     private static final Logger LOG = LoggerFactory.getLogger(DelayedEventService.class);
 
     /**
-     * Subscriptions map
+     * Subscriptions map, manage every event type and its handler
      */
     private final Map<Class<? extends Event>, HandlerAndSubscription<? extends Event>> subscriptions =
         new ConcurrentHashMap<>();
@@ -242,11 +250,11 @@ public class DelayedEventService implements Closeable {
      */
     private final Scheduler handlerScheduler;
     /**
-     * Dispatch redis commands
+     * Redis command for dispatching events
      */
     private final RedisCommands<String, String> dispatchCommands;
     /**
-     * Metrics redis commands
+     * Redis command for handling metrics
      */
     private final RedisCommands<String, String> metricsCommands;
     /**
@@ -322,16 +330,20 @@ public class DelayedEventService implements Closeable {
         metricsCommands = client.connect().sync();
         reactiveCommands = client.connect().reactive();
 
+        // If scheduling is enabled
         if (builder.enableScheduling) {
             long schedulingInterval =
                 checkNotShorter(builder.schedulingInterval, Duration.ofMillis(50), "scheduling interval").toNanos();
-            dispatcherExecutor.scheduleWithFixedDelay(this::dispatchDelayedMessages, schedulingInterval,
+            // Schedule dispatchDelayedMessages in dispatcherExecutor with schedulingInterval
+            dispatcherExecutor.scheduleWithFixedDelay(this::dispatchDelayedEvents, schedulingInterval,
                 schedulingInterval, NANOSECONDS);
         }
 
+        // If subscription refreshing is enabled
         if (builder.refreshSubscriptionInterval != null) {
             long refreshInterval = checkNotShorter(builder.refreshSubscriptionInterval, Duration.ofMinutes(5),
                 "refresh subscription interval").toNanos();
+            // Schedule refreshSubscriptions in dispatcherExecutor with refreshInterval
             dispatcherExecutor.scheduleWithFixedDelay(this::refreshSubscriptions, refreshInterval, refreshInterval,
                 NANOSECONDS);
         }
@@ -406,18 +418,30 @@ public class DelayedEventService implements Closeable {
             createSubscription(old.type, old.handler, old.parallelism));
     }
 
+    /**
+     * Add event to redis ZSET
+     *
+     * @param event Event
+     * @param delay Delay time
+     * @param context Context
+     * @return Mono<TransactionResult>
+     */
     private Mono<TransactionResult> enqueueInner(Event event, Duration delay, Map<String, String> context) {
         return executeInTransaction(() -> {
             String key = getKey(event);
             String rawEnvelope = serialize(EventEnvelope.create(event, context));
 
             reactiveCommands.hset(metadataHset, key, rawEnvelope).subscribeOn(single).subscribe();
+            // Use NX option: Only add new elements. Don't update already existing elements.
             reactiveCommands.zadd(zsetName, nx(), System.currentTimeMillis() + delay.toMillis(), key)
                 .subscribeOn(single).subscribe();
         }).doOnNext(v -> metrics.incrementEnqueueCounter(event.getClass()));
     }
 
-    void dispatchDelayedMessages() {
+    /**
+     * Event dispatcher
+     */
+    void dispatchDelayedEvents() {
         LOG.debug("delayed events dispatch started");
 
         try {
@@ -428,6 +452,7 @@ public class DelayedEventService implements Closeable {
                 return;
             }
 
+            // Get keys from zset by score of current time
             List<String> tasksForExecution = dispatchCommands.zrangebyscore(zsetName,
                 Range.create(-1, System.currentTimeMillis()), schedulingBatchSize);
 
@@ -456,6 +481,7 @@ public class DelayedEventService implements Closeable {
 
         // todo reconnect instead of reset + flux concat instead of generate sink.next(0)
         Flux.generate(sink -> sink.next(0))
+            // Get last element of the list in redis
             .flatMap(r -> pollingConnection.reactive().brpop(pollingTimeout.toMillis() / 1000, queue).doOnError(e -> {
                 if (e instanceof RedisCommandTimeoutException) {
                     LOG.debug("polling command timed out ({} seconds)", pollingTimeout.toMillis() / 1000);
@@ -474,6 +500,12 @@ public class DelayedEventService implements Closeable {
         return subscription;
     }
 
+    /**
+     * Remove event from redis ZSET
+     *
+     * @param event Event
+     * @return Mono<TransactionResult>
+     */
     private Mono<TransactionResult> removeFromDelayedQueue(Event event) {
         return executeInTransaction(() -> {
             String key = getKey(event);
@@ -482,6 +514,12 @@ public class DelayedEventService implements Closeable {
         });
     }
 
+    /**
+     * Run redis commands in one transaction
+     *
+     * @param commands Redis commands
+     * @return Mono<TransactionResult>
+     */
     private Mono<TransactionResult> executeInTransaction(Runnable commands) {
         return Mono.defer(() -> {
             reactiveCommands.multi().subscribeOn(single).subscribe();
@@ -492,6 +530,11 @@ public class DelayedEventService implements Closeable {
         }).subscribeOn(single);
     }
 
+    /**
+     * Dispatch event to redis ZSET
+     *
+     * @param key Key of event
+     */
     private void handleDelayedTask(String key) {
         String rawEnvelope = dispatchCommands.hget(metadataHset, key);
 
@@ -507,6 +550,7 @@ public class DelayedEventService implements Closeable {
         EventEnvelope<? extends Event> currentEnvelope = deserialize(Event.class, rawEnvelope);
         EventEnvelope<? extends Event> nextEnvelope = EventEnvelope.nextAttempt(currentEnvelope);
 
+        // Start a transaction
         dispatchCommands.multi();
 
         if (nextEnvelope.getAttempt() < retryAttempts) {
@@ -539,6 +583,12 @@ public class DelayedEventService implements Closeable {
         return 60L * 24; // next 50 attempts once an hour
     }
 
+    /**
+     * Serialize EventEnvelope to string
+     *
+     * @param envelope EventEnvelope
+     * @return Serialized string
+     */
     @SuppressFBWarnings("EXS_EXCEPTION_SOFTENING_NO_CONSTRAINTS")
     private String serialize(EventEnvelope<? extends Event> envelope) {
         try {
@@ -548,6 +598,14 @@ public class DelayedEventService implements Closeable {
         }
     }
 
+    /**
+     * Deserialize string to EventEnvelope
+     *
+     * @param eventType Event class
+     * @param rawEnvelope String to be deserialized
+     * @param <T> Event type
+     * @return EventEnvelope<T>
+     */
     @SuppressFBWarnings("EXS_EXCEPTION_SOFTENING_NO_CONSTRAINTS")
     private <T extends Event> EventEnvelope<T> deserialize(Class<T> eventType, String rawEnvelope) {
         JavaType envelopeType = mapper.getTypeFactory().constructParametricType(EventEnvelope.class, eventType);
