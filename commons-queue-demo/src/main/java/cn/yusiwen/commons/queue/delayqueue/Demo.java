@@ -111,33 +111,42 @@ public class Demo {
     /**
      * RedisDelayQueue
      */
-    private RedisDelayQueue eventService;
+    private RedisDelayQueue queue;
 
     public void init() {
         redisClient = RedisClient.create("redis://192.168.3.1:6379");
-        eventService = redisDelayQueue().client(redisClient).mapper(objectMapper)
-            .handlerScheduler(Schedulers.fromExecutorService(executor)).enableScheduling(true)
-            .schedulingInterval(Duration.ofSeconds(1)).schedulingBatchSize(SCHEDULING_BATCH_SIZE)
-            .pollingTimeout(POLLING_TIMEOUT).taskContextHandler(new DefaultTaskContextHandler()).dataSetPrefix("")
-            .retryAttempts(10).metrics(new NoopMetrics()).refreshSubscriptionsInterval(Duration.ofMinutes(5)).build();
+        RedisDelayQueue.Builder builder = redisDelayQueue();
+        builder.client(redisClient);
+        builder.mapper(objectMapper);
+        builder.handlerScheduler(Schedulers.fromExecutorService(executor));
+        builder.enableScheduling(true);
+        builder.schedulingInterval(Duration.ofSeconds(1));
+        builder.schedulingBatchSize(SCHEDULING_BATCH_SIZE);
+        builder.pollingTimeout(POLLING_TIMEOUT);
+        builder.taskContextHandler(new DefaultTaskContextHandler());
+        builder.dataSetPrefix("");
+        builder.retryAttempts(10);
+        builder.metrics(new NoopMetrics());
+        builder.refreshSubscriptionsInterval(Duration.ofMinutes(5));
+        queue = builder.build();
     }
 
     public void shutdown() {
-        eventService.close();
+        queue.close();
         redisClient.shutdown();
     }
 
     public void start() {
-        eventService.addTaskHandler(DemoTask.class, e -> Mono.fromCallable(() -> {
+        queue.addTaskHandler(DemoTask.class, e -> Mono.fromCallable(() -> {
             LOG.info("DemoTask received, id = {}", e.getId());
             return TRUE;
         }), 1);
         LOG.info("DemoEvent1 enqueue");
-        eventService.enqueue(new DemoTask("1"), Duration.ofSeconds(10)).subscribe();
+        queue.enqueue(new DemoTask("1"), Duration.ofSeconds(10)).subscribe();
         LOG.info("DemoEvent2 enqueue");
-        eventService.enqueue(new DemoTask("2"), Duration.ofSeconds(15)).subscribe();
+        queue.enqueue(new DemoTask("2"), Duration.ofSeconds(15)).subscribe();
         LOG.info("DemoEvent3 enqueue");
-        eventService.enqueue(new DemoTask("3"), Duration.ofSeconds(20)).subscribe();
+        queue.enqueue(new DemoTask("3"), Duration.ofSeconds(20)).subscribe();
     }
 
     public static void main(String[] args) {
