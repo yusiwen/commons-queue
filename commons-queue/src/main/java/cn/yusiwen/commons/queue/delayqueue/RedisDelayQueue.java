@@ -28,8 +28,8 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.yusiwen.commons.queue.delayqueue.context.EventContextHandler;
-import cn.yusiwen.commons.queue.delayqueue.context.NoopEventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.context.NoopTaskContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.context.TaskContextHandler;
 import cn.yusiwen.commons.queue.delayqueue.metrics.Metrics;
 import cn.yusiwen.commons.queue.delayqueue.metrics.NoopMetrics;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -54,10 +54,10 @@ import reactor.core.scheduler.Schedulers;
  * @author Siwen Yu
  * @since 1.0.0
  */
-public class DelayedEventService implements Closeable {
+public class RedisDelayQueue implements DelayQueue, Closeable {
 
     /**
-     * Builder for DelayedEventService
+     * Builder for RedisDelayQueue
      */
     public static final class Builder {
         /**
@@ -98,9 +98,9 @@ public class DelayedEventService implements Closeable {
          */
         private Metrics metrics = new NoopMetrics();
         /**
-         * EventContextHandler
+         * TaskContextHandler
          */
-        private EventContextHandler eventContextHandler = new NoopEventContextHandler();
+        private TaskContextHandler taskContextHandler = new NoopTaskContextHandler();
         /**
          * Prefix for dataset
          */
@@ -152,8 +152,8 @@ public class DelayedEventService implements Closeable {
             return this;
         }
 
-        public Builder eventContextHandler(@NotNull EventContextHandler val) {
-            eventContextHandler = val;
+        public Builder taskContextHandler(@NotNull TaskContextHandler val) {
+            taskContextHandler = val;
             return this;
         }
 
@@ -172,17 +172,17 @@ public class DelayedEventService implements Closeable {
             return this;
         }
 
-        public DelayedEventService build() {
-            return new DelayedEventService(this);
+        public RedisDelayQueue build() {
+            return new RedisDelayQueue(this);
         }
     }
 
     /**
-     * Handler and subscription, for event handlers management
+     * Handler and subscription, for task handlers management
      *
-     * @param <T> Event
+     * @param <T> Task
      */
-    private static class HandlerAndSubscription<T extends Event> {
+    private static class HandlerAndSubscription<T extends Task> {
         /**
          * Class
          */
@@ -216,12 +216,12 @@ public class DelayedEventService implements Closeable {
     /**
      * Logger
      */
-    private static final Logger LOG = LoggerFactory.getLogger(DelayedEventService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RedisDelayQueue.class);
 
     /**
-     * Subscriptions map, manage every event type and its handler
+     * Subscriptions map, manage every task type and its handler
      */
-    private final Map<Class<? extends Event>, HandlerAndSubscription<? extends Event>> subscriptions =
+    private final Map<Class<? extends Task>, HandlerAndSubscription<? extends Task>> subscriptions =
         new ConcurrentHashMap<>();
 
     /**
@@ -250,7 +250,7 @@ public class DelayedEventService implements Closeable {
      */
     private final Scheduler handlerScheduler;
     /**
-     * Redis command for dispatching events
+     * Redis command for dispatching tasks
      */
     private final RedisCommands<String, String> dispatchCommands;
     /**
@@ -285,9 +285,9 @@ public class DelayedEventService implements Closeable {
      */
     private final Metrics metrics;
     /**
-     * EventContextHandler
+     * TaskContextHandler
      */
-    private final EventContextHandler contextHandler;
+    private final TaskContextHandler contextHandler;
     /**
      * Prefix for dataset
      */
@@ -310,10 +310,10 @@ public class DelayedEventService implements Closeable {
      */
     private final String metadataHset;
 
-    private DelayedEventService(Builder builder) {
+    private RedisDelayQueue(Builder builder) {
         mapper = requireNonNull(builder.mapper, "object mapper");
         client = requireNonNull(builder.client, "redis client");
-        contextHandler = requireNonNull(builder.eventContextHandler, "event context handler");
+        contextHandler = requireNonNull(builder.taskContextHandler, "task context handler");
         pollingTimeout = checkNotShorter(builder.pollingTimeout, Duration.ofMillis(50), "polling interval");
         lockTimeout = Duration.ofSeconds(2);
         retryAttempts = checkInRange(builder.retryAttempts, 1, 100, "retry attempts");
@@ -322,9 +322,9 @@ public class DelayedEventService implements Closeable {
         dataSetPrefix = requireNonNull(builder.dataSetPrefix, "data set prefix");
         schedulingBatchSize = Limit.from(checkInRange(builder.schedulingBatchSize, 1, 1000, "scheduling batch size"));
 
-        zsetName = dataSetPrefix + "delayed_events";
-        lockKey = dataSetPrefix + "delayed_events_lock";
-        metadataHset = dataSetPrefix + "events";
+        zsetName = dataSetPrefix + "delayed_tasks";
+        lockKey = dataSetPrefix + "delayed_tasks_lock";
+        metadataHset = dataSetPrefix + "tasks";
 
         dispatchCommands = client.connect().sync();
         metricsCommands = client.connect().sync();
@@ -335,7 +335,7 @@ public class DelayedEventService implements Closeable {
             long schedulingInterval =
                 checkNotShorter(builder.schedulingInterval, Duration.ofMillis(50), "scheduling interval").toNanos();
             // Schedule dispatchDelayedMessages in dispatcherExecutor with schedulingInterval
-            dispatcherExecutor.scheduleWithFixedDelay(this::dispatchDelayedEvents, schedulingInterval,
+            dispatcherExecutor.scheduleWithFixedDelay(this::dispatchDelayedTasks, schedulingInterval,
                 schedulingInterval, NANOSECONDS);
         }
 
@@ -359,14 +359,15 @@ public class DelayedEventService implements Closeable {
     }
 
     @NotNull
-    public static Builder delayedEventService() {
+    public static Builder redisDelayQueue() {
         return new Builder();
     }
 
-    public <T extends Event> boolean removeHandler(@NotNull Class<T> eventType) {
-        requireNonNull(eventType, "event type");
+    @Override
+    public <T extends Task> boolean removeTaskHandler(@NotNull Class<T> taskType) {
+        requireNonNull(taskType, "task type");
 
-        HandlerAndSubscription<? extends Event> subscription = subscriptions.remove(eventType);
+        HandlerAndSubscription<? extends Task> subscription = subscriptions.remove(taskType);
         if (subscription != null) {
             subscription.subscription.dispose();
             return true;
@@ -374,25 +375,27 @@ public class DelayedEventService implements Closeable {
         return false;
     }
 
-    public <T extends Event> void addHandler(@NotNull Class<T> eventType,
-        @NotNull Function<@NotNull T, @NotNull Mono<Boolean>> handler, int parallelism) {
-        requireNonNull(eventType, "event type");
+    @Override
+    public <T extends Task> void addTaskHandler(@NotNull Class<T> taskType,
+                                                @NotNull Function<@NotNull T, @NotNull Mono<Boolean>> handler, int parallelism) {
+        requireNonNull(taskType, "task type");
         requireNonNull(handler, "handler");
         checkInRange(parallelism, 1, 100, "parallelism");
 
-        subscriptions.computeIfAbsent(eventType, re -> {
-            InnerSubscriber<T> subscription = createSubscription(eventType, handler, parallelism);
-            metrics.registerReadyToProcessSupplier(eventType, () -> metricsCommands.llen(toQueueName(eventType)));
-            return new HandlerAndSubscription<>(eventType, handler, parallelism, subscription);
+        subscriptions.computeIfAbsent(taskType, re -> {
+            InnerSubscriber<T> subscription = createSubscription(taskType, handler, parallelism);
+            metrics.registerReadyToProcessSupplier(taskType, () -> metricsCommands.llen(toQueueName(taskType)));
+            return new HandlerAndSubscription<>(taskType, handler, parallelism, subscription);
         });
     }
 
-    public Mono<Void> enqueue(@NotNull Event event, @NotNull Duration delay) {
-        requireNonNull(event, "event");
+    @Override
+    public <T extends Task> Mono<Void> enqueue(@NotNull T task, @NotNull Duration delay) {
+        requireNonNull(task, "task");
         requireNonNull(delay, "delay");
-        requireNonNull(event.getId(), "event id");
+        requireNonNull(task.getId(), "task id");
 
-        return Mono.subscriberContext().flatMap(ctx -> enqueueInner(event, delay, contextHandler.eventContext(ctx)))
+        return Mono.subscriberContext().flatMap(ctx -> enqueueInner(task, delay, contextHandler.taskContext(ctx)))
             .then();
     }
 
@@ -412,43 +415,43 @@ public class DelayedEventService implements Closeable {
         handlerScheduler.dispose();
     }
 
-    private <T extends Event> HandlerAndSubscription<T> createNewSubscription(HandlerAndSubscription<T> old) {
+    private <T extends Task> HandlerAndSubscription<T> createNewSubscription(HandlerAndSubscription<T> old) {
         LOG.info("refreshing subscription for [{}]", old.type.getName());
         return new HandlerAndSubscription<>(old.type, old.handler, old.parallelism,
             createSubscription(old.type, old.handler, old.parallelism));
     }
 
     /**
-     * Add event to redis ZSET
+     * Add task to redis ZSET
      *
-     * @param event Event
+     * @param task Task
      * @param delay Delay time
      * @param context Context
      * @return Mono<TransactionResult>
      */
-    private Mono<TransactionResult> enqueueInner(Event event, Duration delay, Map<String, String> context) {
+    private Mono<TransactionResult> enqueueInner(Task task, Duration delay, Map<String, String> context) {
         return executeInTransaction(() -> {
-            String key = getKey(event);
-            String rawEnvelope = serialize(EventEnvelope.create(event, context));
+            String key = getKey(task);
+            String rawEnvelope = serialize(TaskWrapper.create(task, context));
 
             reactiveCommands.hset(metadataHset, key, rawEnvelope).subscribeOn(single).subscribe();
             // Use NX option: Only add new elements. Don't update already existing elements.
             reactiveCommands.zadd(zsetName, nx(), System.currentTimeMillis() + delay.toMillis(), key)
                 .subscribeOn(single).subscribe();
-        }).doOnNext(v -> metrics.incrementEnqueueCounter(event.getClass()));
+        }).doOnNext(v -> metrics.incrementEnqueueCounter(task.getClass()));
     }
 
     /**
-     * Event dispatcher
+     * Task dispatcher
      */
-    void dispatchDelayedEvents() {
-        LOG.debug("delayed events dispatch started");
+    void dispatchDelayedTasks() {
+        LOG.debug("delayed tasks dispatch started");
 
         try {
             String lock = tryLock();
 
             if (lock == null) {
-                LOG.debug("unable to obtain lock for delayed events dispatch");
+                LOG.debug("unable to obtain lock for delayed tasks dispatch");
                 return;
             }
 
@@ -461,23 +464,23 @@ public class DelayedEventService implements Closeable {
                 return;
             }
 
-            tasksForExecution.forEach(this::handleDelayedTask);
+            tasksForExecution.forEach(this::notify);
         } catch (RedisException e) {
             LOG.warn("Error during dispatch", e);
             dispatchCommands.reset();
             throw e;
         } finally {
             unlock();
-            LOG.debug("delayed events dispatch finished");
+            LOG.debug("delayed tasks dispatch finished");
         }
     }
 
-    private <T extends Event> InnerSubscriber<T> createSubscription(Class<T> eventType,
+    private <T extends Task> InnerSubscriber<T> createSubscription(Class<T> taskType,
         Function<T, Mono<Boolean>> handler, int parallelism) {
         StatefulRedisConnection<String, String> pollingConnection = client.connect();
         InnerSubscriber<T> subscription = new InnerSubscriber<>(contextHandler, handler, parallelism, pollingConnection,
             handlerScheduler, this::removeFromDelayedQueue);
-        String queue = toQueueName(eventType);
+        String queue = toQueueName(taskType);
 
         // todo reconnect instead of reset + flux concat instead of generate sink.next(0)
         Flux.generate(sink -> sink.next(0))
@@ -489,26 +492,27 @@ public class DelayedEventService implements Closeable {
                     LOG.warn("error polling redis queue", e);
                 }
                 pollingConnection.reset();
-            }).onErrorReturn(KeyValue.empty(eventType.getName())), 1, // it doesn't make sense to do requests on single
+            }).onErrorReturn(KeyValue.empty(taskType.getName())), 1, // it doesn't make sense to do requests on single
                                                                       // connection in parallel
                 parallelism)
             .publishOn(handlerScheduler, parallelism).defaultIfEmpty(KeyValue.empty(queue)).filter(Value::hasValue)
-            .doOnNext(v -> metrics.incrementDequeueCounter(eventType)).map(Value::getValue)
-            .map(v -> deserialize(eventType, v)).onErrorContinue((e, r) -> LOG.warn("Unable to deserialize [{}]", r, e))
+            .doOnNext(v -> metrics.incrementDequeueCounter(taskType)).map(Value::getValue)
+            .map(v -> deserialize(taskType, v)).onErrorContinue((e, r) -> LOG.warn("Unable to deserialize [{}]", r, e))
             .subscribe(subscription);
 
         return subscription;
     }
 
     /**
-     * Remove event from redis ZSET
+     * Remove task from redis ZSET
      *
-     * @param event Event
+     * @param task Task
+     * @param <T> Task type
      * @return Mono<TransactionResult>
      */
-    private Mono<TransactionResult> removeFromDelayedQueue(Event event) {
+    private <T extends Task> Mono<TransactionResult> removeFromDelayedQueue(T task) {
         return executeInTransaction(() -> {
-            String key = getKey(event);
+            String key = getKey(task);
             reactiveCommands.hdel(metadataHset, key).subscribeOn(single).subscribe();
             reactiveCommands.zrem(zsetName, key).subscribeOn(single).subscribe();
         });
@@ -531,11 +535,11 @@ public class DelayedEventService implements Closeable {
     }
 
     /**
-     * Dispatch event to redis ZSET
+     * Notify task handlers polling on Redis lists
      *
-     * @param key Key of event
+     * @param key Key of task
      */
-    private void handleDelayedTask(String key) {
+    private void notify(String key) {
         String rawEnvelope = dispatchCommands.hget(metadataHset, key);
 
         // We could have stale data because other instance already processed and deleted this key
@@ -547,8 +551,8 @@ public class DelayedEventService implements Closeable {
             return;
         }
 
-        EventEnvelope<? extends Event> currentEnvelope = deserialize(Event.class, rawEnvelope);
-        EventEnvelope<? extends Event> nextEnvelope = EventEnvelope.nextAttempt(currentEnvelope);
+        TaskWrapper<? extends Task> currentEnvelope = deserialize(Task.class, rawEnvelope);
+        TaskWrapper<? extends Task> nextEnvelope = TaskWrapper.nextAttempt(currentEnvelope);
 
         // Start a transaction
         dispatchCommands.multi();
@@ -564,7 +568,7 @@ public class DelayedEventService implements Closeable {
 
         dispatchCommands.exec();
 
-        LOG.debug("dispatched event [{}]", currentEnvelope);
+        LOG.debug("notify task [{}]", currentEnvelope);
     }
 
     private long nextAttemptTime(int attempt) {
@@ -584,13 +588,13 @@ public class DelayedEventService implements Closeable {
     }
 
     /**
-     * Serialize EventEnvelope to string
+     * Serialize TaskWrapper to string
      *
-     * @param envelope EventEnvelope
+     * @param envelope TaskWrapper
      * @return Serialized string
      */
     @SuppressFBWarnings("EXS_EXCEPTION_SOFTENING_NO_CONSTRAINTS")
-    private String serialize(EventEnvelope<? extends Event> envelope) {
+    private String serialize(TaskWrapper<? extends Task> envelope) {
         try {
             return mapper.writeValueAsString(envelope);
         } catch (JsonProcessingException e) {
@@ -599,16 +603,16 @@ public class DelayedEventService implements Closeable {
     }
 
     /**
-     * Deserialize string to EventEnvelope
+     * Deserialize string to TaskWrapper
      *
-     * @param eventType Event class
+     * @param taskType Task class
      * @param rawEnvelope String to be deserialized
-     * @param <T> Event type
-     * @return EventEnvelope<T>
+     * @param <T> Task type
+     * @return TaskWrapper<T>
      */
     @SuppressFBWarnings("EXS_EXCEPTION_SOFTENING_NO_CONSTRAINTS")
-    private <T extends Event> EventEnvelope<T> deserialize(Class<T> eventType, String rawEnvelope) {
-        JavaType envelopeType = mapper.getTypeFactory().constructParametricType(EventEnvelope.class, eventType);
+    private <T extends Task> TaskWrapper<T> deserialize(Class<T> taskType, String rawEnvelope) {
+        JavaType envelopeType = mapper.getTypeFactory().constructParametricType(TaskWrapper.class, taskType);
         try {
             return mapper.readValue(rawEnvelope, envelopeType);
         } catch (IOException e) {
@@ -628,12 +632,12 @@ public class DelayedEventService implements Closeable {
         }
     }
 
-    private String toQueueName(Class<? extends Event> cls) {
+    private String toQueueName(Class<? extends Task> cls) {
         return dataSetPrefix + cls.getSimpleName().toLowerCase();
     }
 
-    static String getKey(Event event) {
-        return event.getClass().getName() + DELIMITER + event.getId();
+    static String getKey(Task task) {
+        return task.getClass().getName() + DELIMITER + task.getId();
     }
 
     private static int checkInRange(int value, int min, int max, String message) {

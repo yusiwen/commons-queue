@@ -2,7 +2,7 @@ package cn.yusiwen.commons.queue.delayqueue;
 
 import static java.lang.Boolean.TRUE;
 
-import static cn.yusiwen.commons.queue.delayqueue.DelayedEventService.delayedEventService;
+import static cn.yusiwen.commons.queue.delayqueue.RedisDelayQueue.redisDelayQueue;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,7 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.yusiwen.commons.queue.delayqueue.context.DefaultEventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.context.DefaultTaskContextHandler;
 import cn.yusiwen.commons.queue.delayqueue.metrics.NoopMetrics;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.lettuce.core.RedisClient;
@@ -31,7 +31,7 @@ import reactor.core.scheduler.Schedulers;
 @SuppressFBWarnings("HES_EXECUTOR_NEVER_SHUTDOWN")
 public class Demo {
 
-    private static class DemoEvent implements Event {
+    private static class DemoTask implements Task {
 
         /**
          * Id
@@ -40,7 +40,7 @@ public class Demo {
         private final String id;
 
         @ConstructorProperties({"id"})
-        private DemoEvent(String id) {
+        private DemoTask(String id) {
             this.id = id;
         }
 
@@ -54,10 +54,10 @@ public class Demo {
             if (this == o) {
                 return true;
             }
-            if (!(o instanceof DemoEvent)) {
+            if (!(o instanceof DemoTask)) {
                 return false;
             }
-            DemoEvent that = (DemoEvent)o;
+            DemoTask that = (DemoTask)o;
             return Objects.equals(id, that.id);
         }
 
@@ -109,16 +109,16 @@ public class Demo {
     private RedisClient redisClient;
 
     /**
-     * DelayedEventService
+     * RedisDelayQueue
      */
-    private DelayedEventService eventService;
+    private RedisDelayQueue eventService;
 
     public void init() {
         redisClient = RedisClient.create("redis://192.168.3.1:6379");
-        eventService = delayedEventService().client(redisClient).mapper(objectMapper)
+        eventService = redisDelayQueue().client(redisClient).mapper(objectMapper)
             .handlerScheduler(Schedulers.fromExecutorService(executor)).enableScheduling(true)
             .schedulingInterval(Duration.ofSeconds(1)).schedulingBatchSize(SCHEDULING_BATCH_SIZE)
-            .pollingTimeout(POLLING_TIMEOUT).eventContextHandler(new DefaultEventContextHandler()).dataSetPrefix("")
+            .pollingTimeout(POLLING_TIMEOUT).taskContextHandler(new DefaultTaskContextHandler()).dataSetPrefix("")
             .retryAttempts(10).metrics(new NoopMetrics()).refreshSubscriptionsInterval(Duration.ofMinutes(5)).build();
     }
 
@@ -128,16 +128,16 @@ public class Demo {
     }
 
     public void start() {
-        eventService.addHandler(DemoEvent.class, e -> Mono.fromCallable(() -> {
-            LOG.info("DemoEvent received, id = {}", e.getId());
+        eventService.addTaskHandler(DemoTask.class, e -> Mono.fromCallable(() -> {
+            LOG.info("DemoTask received, id = {}", e.getId());
             return TRUE;
         }), 1);
         LOG.info("DemoEvent1 enqueue");
-        eventService.enqueue(new DemoEvent("1"), Duration.ofSeconds(10)).subscribe();
+        eventService.enqueue(new DemoTask("1"), Duration.ofSeconds(10)).subscribe();
         LOG.info("DemoEvent2 enqueue");
-        eventService.enqueue(new DemoEvent("2"), Duration.ofSeconds(10)).subscribe();
+        eventService.enqueue(new DemoTask("2"), Duration.ofSeconds(10)).subscribe();
         LOG.info("DemoEvent3 enqueue");
-        eventService.enqueue(new DemoEvent("3"), Duration.ofSeconds(10)).subscribe();
+        eventService.enqueue(new DemoTask("3"), Duration.ofSeconds(10)).subscribe();
     }
 
     public static void main(String[] args) {

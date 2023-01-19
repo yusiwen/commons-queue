@@ -2,7 +2,7 @@ package cn.yusiwen.commons.queue.delayqueue.metrics;
 
 import java.util.function.Supplier;
 
-import cn.yusiwen.commons.queue.delayqueue.Event;
+import cn.yusiwen.commons.queue.delayqueue.Task;
 
 /**
  * @author Siwen Yu
@@ -11,12 +11,12 @@ import cn.yusiwen.commons.queue.delayqueue.Event;
 public class NoopMetrics implements Metrics {
 
     @Override
-    public <T extends Event> void incrementEnqueueCounter(Class<T> type) {
+    public <T extends Task> void incrementEnqueueCounter(Class<T> type) {
         // no-op
     }
 
     @Override
-    public <T extends Event> void incrementDequeueCounter(Class<T> type) {
+    public <T extends Task> void incrementDequeueCounter(Class<T> type) {
         // no-op
     }
 
@@ -26,7 +26,7 @@ public class NoopMetrics implements Metrics {
     }
 
     @Override
-    public <T extends Event> void registerReadyToProcessSupplier(Class<T> type, Supplier<Number> countSupplier) {
+    public <T extends Task> void registerReadyToProcessSupplier(Class<T> type, Supplier<Number> countSupplier) {
         // no-op
     }
 }

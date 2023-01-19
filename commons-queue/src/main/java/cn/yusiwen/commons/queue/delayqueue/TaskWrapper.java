@@ -10,12 +10,16 @@ import java.util.Objects;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
+ * Wrapper for Task
+ * <p>
+ * Make <code>Task</code> compatible with Redis
+ *
  * @author Siwen Yu
  * @since 1.0.0
- * @param <T> Event
+ * @param <T> Task
  */
 @SuppressFBWarnings("JACKSON_UNSAFE_DESERIALIZATION")
-final class EventEnvelope<T extends Event> {
+final class TaskWrapper<T extends Task> {
 
     /**
      * Payload
@@ -34,18 +38,18 @@ final class EventEnvelope<T extends Event> {
     private final Map<String, String> logContext;
 
     @ConstructorProperties({"payload", "attempt", "logContext"})
-    private EventEnvelope(T payload, int attempt, Map<String, String> logContext) {
+    private TaskWrapper(T payload, int attempt, Map<String, String> logContext) {
         this.payload = payload;
         this.attempt = attempt;
         this.logContext = logContext;
     }
 
-    static <R extends Event> EventEnvelope<R> create(R payload, Map<String, String> logContext) {
-        return new EventEnvelope<>(payload, 1, logContext);
+    static <R extends Task> TaskWrapper<R> create(R payload, Map<String, String> logContext) {
+        return new TaskWrapper<>(payload, 1, logContext);
     }
 
-    static <R extends Event> EventEnvelope<R> nextAttempt(EventEnvelope<R> current) {
-        return new EventEnvelope<>(current.payload, current.attempt + 1, current.logContext);
+    static <R extends Task> TaskWrapper<R> nextAttempt(TaskWrapper<R> current) {
+        return new TaskWrapper<>(current.payload, current.attempt + 1, current.logContext);
     }
 
     @SuppressWarnings("unchecked")
@@ -69,10 +73,10 @@ final class EventEnvelope<T extends Event> {
     public boolean equals(Object o) {
         if (this == o) {
             return true;
-        } else if (!(o instanceof EventEnvelope)) {
+        } else if (!(o instanceof TaskWrapper)) {
             return false;
         } else {
-            EventEnvelope<?> that = (EventEnvelope)o;
+            TaskWrapper<?> that = (TaskWrapper<?>)o;
             return this.attempt == that.attempt && Objects.equals(this.payload, that.payload)
                 && Objects.equals(this.logContext, that.logContext);
         }
@@ -85,7 +89,7 @@ final class EventEnvelope<T extends Event> {
 
     @Override
     public String toString() {
-        return String.format("redis event %s#%s with attempt %s", payload.getClass().getName(), payload.getId(),
+        return String.format("redis task %s#%s with attempt %s", payload.getClass().getName(), payload.getId(),
             attempt);
     }
 }

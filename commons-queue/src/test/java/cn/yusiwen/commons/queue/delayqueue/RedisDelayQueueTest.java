@@ -5,7 +5,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.toList;
 
-import static cn.yusiwen.commons.queue.delayqueue.DelayedEventService.delayedEventService;
+import static cn.yusiwen.commons.queue.delayqueue.RedisDelayQueue.redisDelayQueue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -35,7 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
-import cn.yusiwen.commons.queue.delayqueue.context.DefaultEventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.context.DefaultTaskContextHandler;
 import cn.yusiwen.commons.queue.delayqueue.metrics.NoopMetrics;
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
@@ -50,15 +50,15 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-class DelayedEventServiceTest {
+class RedisDelayQueueTest {
 
-    private static class DummyEvent implements Event {
+    private static class DummyTask implements Task {
 
         @JsonProperty
         private final String id;
 
         @ConstructorProperties({"id"})
-        private DummyEvent(String id) {
+        private DummyTask(String id) {
             this.id = id;
         }
 
@@ -72,10 +72,10 @@ class DelayedEventServiceTest {
             if (this == o) {
                 return true;
             }
-            if (!(o instanceof DummyEvent)) {
+            if (!(o instanceof DummyTask)) {
                 return false;
             }
-            DummyEvent that = (DummyEvent)o;
+            DummyTask that = (DummyTask)o;
             return Objects.equals(id, that.id);
         }
 
@@ -85,13 +85,13 @@ class DelayedEventServiceTest {
         }
     }
 
-    private static class DummyEvent2 implements Event {
+    private static class DummyTask2 implements Task {
 
         @JsonProperty
         private final String id;
 
         @ConstructorProperties({"id"})
-        private DummyEvent2(String id) {
+        private DummyTask2(String id) {
             this.id = id;
         }
 
@@ -105,10 +105,10 @@ class DelayedEventServiceTest {
             if (this == o) {
                 return true;
             }
-            if (!(o instanceof DummyEvent2)) {
+            if (!(o instanceof DummyTask2)) {
                 return false;
             }
-            DummyEvent2 that = (DummyEvent2)o;
+            DummyTask2 that = (DummyTask2)o;
             return Objects.equals(id, that.id);
         }
 
@@ -118,13 +118,13 @@ class DelayedEventServiceTest {
         }
     }
 
-    private static class DummyEvent3 implements Event {
+    private static class DummyTask3 implements Task {
 
         @JsonProperty
         private final String id;
 
         @ConstructorProperties({"id"})
-        private DummyEvent3(String id) {
+        private DummyTask3(String id) {
             this.id = id;
         }
 
@@ -138,10 +138,10 @@ class DelayedEventServiceTest {
             if (this == o) {
                 return true;
             }
-            if (!(o instanceof DummyEvent3)) {
+            if (!(o instanceof DummyTask3)) {
                 return false;
             }
-            DummyEvent3 that = (DummyEvent3)o;
+            DummyTask3 that = (DummyTask3)o;
             return Objects.equals(id, that.id);
         }
 
@@ -151,16 +151,16 @@ class DelayedEventServiceTest {
         }
     }
 
-    private static final String DELAYED_QUEUE = "delayed_events";
+    private static final String DELAYED_QUEUE = "delayed_tasks";
     private static final String TOXIPROXY_IP = ofNullable(System.getenv("TOXIPROXY_IP")).orElse("127.0.0.1");
 
     private static final Duration POLLING_TIMEOUT = Duration.ofSeconds(1);
-    private static final Function<DummyEvent, Mono<Boolean>> DUMMY_HANDLER = e -> Mono.just(true);
+    private static final Function<DummyTask, Mono<Boolean>> DUMMY_HANDLER = e -> Mono.just(true);
     private static final int SCHEDULING_BATCH_SIZE = 50;
 
     private RedisClient redisClient;
     private RedisCommands<String, String> connection;
-    private DelayedEventService eventService;
+    private RedisDelayQueue eventService;
     private final ExecutorService executor = Executors.newFixedThreadPool(10);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ToxiproxyClient toxiProxyClient = new ToxiproxyClient(TOXIPROXY_IP, 8474);
@@ -175,10 +175,10 @@ class DelayedEventServiceTest {
             .timeoutOptions(TimeoutOptions.builder().timeoutCommands().fixedTimeout(Duration.ofMillis(500)).build())
             .build());
 
-        eventService = delayedEventService().client(redisClient).mapper(objectMapper)
+        eventService = redisDelayQueue().client(redisClient).mapper(objectMapper)
             .handlerScheduler(Schedulers.fromExecutorService(executor)).schedulingInterval(Duration.ofSeconds(1))
             .schedulingBatchSize(SCHEDULING_BATCH_SIZE).enableScheduling(false).pollingTimeout(POLLING_TIMEOUT)
-            .eventContextHandler(new DefaultEventContextHandler()).dataSetPrefix("").retryAttempts(10)
+            .taskContextHandler(new DefaultTaskContextHandler()).dataSetPrefix("").retryAttempts(10)
             .metrics(new NoopMetrics()).refreshSubscriptionsInterval(Duration.ofMinutes(5)).build();
 
         connection = redisClient.connect().sync();
@@ -199,25 +199,28 @@ class DelayedEventServiceTest {
         int total = 30;
         CountDownLatch latch = new CountDownLatch(total);
 
-        eventService.addHandler(DummyEvent.class, e -> Mono.fromCallable(() -> randomSleepBeforeCountdown(latch)), 3);
-        eventService.addHandler(DummyEvent2.class, e -> Mono.fromCallable(() -> randomSleepBeforeCountdown(latch)), 3);
-        eventService.addHandler(DummyEvent3.class, e -> Mono.fromCallable(() -> randomSleepBeforeCountdown(latch)), 3);
+        eventService.addTaskHandler(DummyTask.class, e -> Mono.fromCallable(() -> randomSleepBeforeCountdown(latch)),
+            3);
+        eventService.addTaskHandler(DummyTask2.class, e -> Mono.fromCallable(() -> randomSleepBeforeCountdown(latch)),
+            3);
+        eventService.addTaskHandler(DummyTask3.class, e -> Mono.fromCallable(() -> randomSleepBeforeCountdown(latch)),
+            3);
         // and events are queued
         enqueue(total, id -> {
             String str = Integer.toString(id);
             switch (id % 3) {
                 case 2:
-                    return new DummyEvent3(str);
+                    return new DummyTask3(str);
                 case 1:
-                    return new DummyEvent2(str);
+                    return new DummyTask2(str);
                 default:
-                    return new DummyEvent(str);
+                    return new DummyTask(str);
             }
         }).block();
 
         assertEventsCount(total);
         // when
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         // then
         waitAndAssertEventsCount(0L);
     }
@@ -229,7 +232,7 @@ class DelayedEventServiceTest {
         int prefetch = 1;
         Semaphore sem = new Semaphore(1);
 
-        eventService.addHandler(DummyEvent.class, e -> Mono.fromCallable(() -> {
+        eventService.addTaskHandler(DummyTask.class, e -> Mono.fromCallable(() -> {
             sem.acquireUninterruptibly();
             return true;
         }), prefetch);
@@ -237,7 +240,7 @@ class DelayedEventServiceTest {
         enqueue(total).block();
         assertEventsCount(total);
         // when
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         // then
         waitAndAssertEventsCount(total - prefetch);
     }
@@ -247,14 +250,14 @@ class DelayedEventServiceTest {
         // given
         String contextValue = "context";
         AtomicReference<String> holder = new AtomicReference<>();
-        eventService.addHandler(DummyEvent.class, e -> Mono.subscriberContext().doOnNext(ctx -> {
+        eventService.addTaskHandler(DummyTask.class, e -> Mono.subscriberContext().doOnNext(ctx -> {
             Map<String, String> eventContext = ctx.get("eventContext");
             holder.set(eventContext.get("key"));
         }).thenReturn(true), 1);
         // and events are queued with context
         enqueue(1).subscriberContext(ctx -> ctx.put("eventContext", singletonMap("key", contextValue))).block();
         // when
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         // then
         waitAndAssertEventsCount(0);
         assertThat(holder.get(), equalTo(contextValue));
@@ -268,7 +271,7 @@ class DelayedEventServiceTest {
         final int parallelism = 10;
         CountDownLatch latch = new CountDownLatch(20);
 
-        eventService.addHandler(DummyEvent.class, e -> Mono.fromCallable(() -> {
+        eventService.addTaskHandler(DummyTask.class, e -> Mono.fromCallable(() -> {
             try {
                 MILLISECONDS.sleep(500);
                 latch.countDown();
@@ -281,7 +284,7 @@ class DelayedEventServiceTest {
         enqueue(total).block();
         assertEventsCount(total);
         // when
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         // then task execution takes 500, 20 should complete in 1000 (with parallelism of 10), 100 ms as reserve
         assertThat(latch.await(total / parallelism * timeout + 100, MILLISECONDS), equalTo(true));
     }
@@ -290,8 +293,8 @@ class DelayedEventServiceTest {
     void shouldBeAbleToEnqueueConcurrently() {
         // when
         Flux.merge(IntStream.range(0, 50).parallel()
-            .mapToObj(id -> eventService.enqueue(new DummyEvent(Integer.toString(id)), Duration.ZERO))
-            .collect(toList())).then().block();
+            .mapToObj(id -> eventService.enqueue(new DummyTask(Integer.toString(id)), Duration.ZERO)).collect(toList()))
+            .then().block();
         // then
         assertEventsCount(50L);
     }
@@ -304,13 +307,13 @@ class DelayedEventServiceTest {
         enqueue(total).block();
         waitAndAssertEventsCount(total);
         // and a malformed event is placed in the beginning of a list
-        connection.lpush(toQueueName(DummyEvent.class), "[unserializable}");
-        eventService.dispatchDelayedEvents();
+        connection.lpush(toQueueName(DummyTask.class), "[unserializable}");
+        eventService.dispatchDelayedTasks();
         // and all events are moved to list
-        assertThat(connection.llen(toQueueName(DummyEvent.class)), equalTo((long)total + 1));
+        assertThat(connection.llen(toQueueName(DummyTask.class)), equalTo((long)total + 1));
         // when
         CountDownLatch latch = new CountDownLatch(total + 1);
-        eventService.addHandler(DummyEvent.class, e -> Mono.fromCallable(() -> {
+        eventService.addTaskHandler(DummyTask.class, e -> Mono.fromCallable(() -> {
             latch.countDown();
             return true;
         }), 1);
@@ -322,7 +325,7 @@ class DelayedEventServiceTest {
     @Test
     void shouldBeAbleToReconnect() throws InterruptedException, IOException {
         // given
-        eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 1);
+        eventService.addTaskHandler(DummyTask.class, DUMMY_HANDLER, 1);
         // when connection is broken
         redisProxy.delete();
         MILLISECONDS.sleep(POLLING_TIMEOUT.toMillis() + 100);
@@ -331,21 +334,21 @@ class DelayedEventServiceTest {
         // then new event is handled
         enqueue(1).block();
         assertEventsCount(1L);
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         waitAndAssertEventsCount(0L);
     }
 
     @Test
     void shouldHandlePollingTimeout() throws InterruptedException {
         // given
-        eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 1);
+        eventService.addTaskHandler(DummyTask.class, DUMMY_HANDLER, 1);
         // and no events have arrived during a polling interval
         MILLISECONDS.sleep(POLLING_TIMEOUT.toMillis() + 100);
         // and event is queued
         enqueue(1).block();
         assertEventsCount(1L);
         // then
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         waitAndAssertEventsCount(0L);
     }
 
@@ -353,14 +356,15 @@ class DelayedEventServiceTest {
     void shouldFailToSubscribeIfConnectionNotAvailable() throws IOException {
         redisProxy.delete();
 
-        assertThrows(RedisConnectionException.class, () -> eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 1));
+        assertThrows(RedisConnectionException.class,
+            () -> eventService.addTaskHandler(DummyTask.class, DUMMY_HANDLER, 1));
     }
 
     @Test
     void shouldFailToDispatchIfConnectionNotAvailable() throws IOException {
         redisProxy.delete();
 
-        assertThrows(RedisCommandTimeoutException.class, () -> eventService.dispatchDelayedEvents());
+        assertThrows(RedisCommandTimeoutException.class, () -> eventService.dispatchDelayedTasks());
     }
 
     @Test
@@ -369,7 +373,7 @@ class DelayedEventServiceTest {
         int total = 6;
         CountDownLatch latch = new CountDownLatch(total);
 
-        eventService.addHandler(DummyEvent.class, e -> {
+        eventService.addTaskHandler(DummyTask.class, e -> {
             latch.countDown();
 
             switch ((Integer.parseInt(e.getId())) % total) {
@@ -393,7 +397,7 @@ class DelayedEventServiceTest {
         enqueue(total).block();
         waitAndAssertEventsCount(total);
         // when
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         // then only valid events are handled
         waitAndAssertEventsCount(total - 1);
     }
@@ -401,13 +405,13 @@ class DelayedEventServiceTest {
     @Test
     void shouldRescheduleEventForLaterTimeDuringDispatch() {
         // given event is queued
-        DummyEvent event = new DummyEvent("99");
+        DummyTask event = new DummyTask("99");
         eventService.enqueue(event, Duration.ZERO).block();
 
-        double initialScore = connection.zscore(DELAYED_QUEUE, DelayedEventService.getKey(event));
+        double initialScore = connection.zscore(DELAYED_QUEUE, RedisDelayQueue.getKey(event));
         // when
-        eventService.dispatchDelayedEvents();
-        double postDispatchScore = connection.zscore(DELAYED_QUEUE, DelayedEventService.getKey(event));
+        eventService.dispatchDelayedTasks();
+        double postDispatchScore = connection.zscore(DELAYED_QUEUE, RedisDelayQueue.getKey(event));
         // then the post dispatch score is 10 sec ahead
         assertThat(postDispatchScore - initialScore, greaterThan(10000.0));
     }
@@ -422,7 +426,7 @@ class DelayedEventServiceTest {
         assertEventsCount(total);
         long maxScore = System.currentTimeMillis();
         // when
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         // then only SCHEDULING_BATCH_SIZE are rescheduled
         assertThat(connection.zcount(DELAYED_QUEUE, Range.create(0, maxScore)), equalTo((long)extra));
     }
@@ -430,7 +434,7 @@ class DelayedEventServiceTest {
     @Test
     void shouldNotDuplicateSameEvents() {
         // given
-        DummyEvent event = new DummyEvent("1");
+        DummyTask event = new DummyTask("1");
         // when
         eventService.enqueue(event, Duration.ZERO).block();
         eventService.enqueue(event, Duration.ZERO).block();
@@ -439,16 +443,16 @@ class DelayedEventServiceTest {
     }
 
     @Test
-    void shouldBeAbleToRemoveHandler() {
+    void shouldBeAbleToremoveTaskHandler() {
         // given
-        eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 1);
+        eventService.addTaskHandler(DummyTask.class, DUMMY_HANDLER, 1);
         // and events are enqueued
         enqueue(10).block();
-        eventService.dispatchDelayedEvents();
+        eventService.dispatchDelayedTasks();
         waitAndAssertEventsCount(0L);
         // when
-        assertThat(eventService.removeHandler(DummyEvent.class), equalTo(true));
-        assertThat(eventService.removeHandler(DummyEvent.class), equalTo(false));
+        assertThat(eventService.removeTaskHandler(DummyTask.class), equalTo(true));
+        assertThat(eventService.removeTaskHandler(DummyTask.class), equalTo(false));
         // then new events are not handled
         enqueue(10).block();
         waitAndAssertEventsCount(10L);
@@ -459,7 +463,7 @@ class DelayedEventServiceTest {
         // given
         int initNumber = serviceConnectionsCount();
         // when
-        eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 1);
+        eventService.addTaskHandler(DummyTask.class, DUMMY_HANDLER, 1);
         sleepMillis(100);
         assertThat(serviceConnectionsCount() - initNumber, is(1));
         // and subscription is refreshed
@@ -471,18 +475,19 @@ class DelayedEventServiceTest {
 
     @Test
     void shouldNotAllowToEnqueueNulls() {
-        assertThrows(NullPointerException.class, () -> eventService.enqueue(new DummyEvent("1"), null));
+        assertThrows(NullPointerException.class, () -> eventService.enqueue(new DummyTask("1"), null));
         assertThrows(NullPointerException.class, () -> eventService.enqueue(null, Duration.ZERO));
-        assertThrows(NullPointerException.class, () -> eventService.enqueue(new DummyEvent(null), Duration.ZERO));
+        assertThrows(NullPointerException.class, () -> eventService.enqueue(new DummyTask(null), Duration.ZERO));
     }
 
     @Test
     void shouldValidateAddedHandler() {
-        assertThrows(NullPointerException.class, () -> eventService.addHandler(null, DUMMY_HANDLER, 1));
-        assertThrows(NullPointerException.class, () -> eventService.addHandler(DummyEvent.class, null, 1));
-        assertThrows(IllegalArgumentException.class, () -> eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 0));
+        assertThrows(NullPointerException.class, () -> eventService.addTaskHandler(null, DUMMY_HANDLER, 1));
+        assertThrows(NullPointerException.class, () -> eventService.addTaskHandler(DummyTask.class, null, 1));
         assertThrows(IllegalArgumentException.class,
-            () -> eventService.addHandler(DummyEvent.class, DUMMY_HANDLER, 101));
+            () -> eventService.addTaskHandler(DummyTask.class, DUMMY_HANDLER, 0));
+        assertThrows(IllegalArgumentException.class,
+            () -> eventService.addTaskHandler(DummyTask.class, DUMMY_HANDLER, 101));
     }
 
     private void removeOldProxies() throws IOException {
@@ -503,20 +508,20 @@ class DelayedEventServiceTest {
         return enqueue(IntStream.range(0, num));
     }
 
-    private Mono<Void> enqueue(int num, Function<Integer, Event> transformer) {
+    private Mono<Void> enqueue(int num, Function<Integer, Task> transformer) {
         return enqueue(IntStream.range(0, num), transformer);
     }
 
     private Mono<Void> enqueue(IntStream stream) {
-        return enqueue(stream, id -> new DummyEvent(Integer.toString(id)));
+        return enqueue(stream, id -> new DummyTask(Integer.toString(id)));
     }
 
-    private Mono<Void> enqueue(IntStream stream, Function<Integer, Event> transformer) {
+    private Mono<Void> enqueue(IntStream stream, Function<Integer, Task> transformer) {
         return Flux.fromStream(stream::boxed).flatMap(id -> eventService.enqueue(transformer.apply(id), Duration.ZERO))
             .then();
     }
 
-    private String toQueueName(Class<? extends Event> cls) {
+    private String toQueueName(Class<? extends Task> cls) {
         return cls.getSimpleName().toLowerCase();
     }
 

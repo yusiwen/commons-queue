@@ -9,7 +9,7 @@ import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cn.yusiwen.commons.queue.delayqueue.context.EventContextHandler;
+import cn.yusiwen.commons.queue.delayqueue.context.TaskContextHandler;
 import io.lettuce.core.TransactionResult;
 import io.lettuce.core.api.StatefulRedisConnection;
 import reactor.core.publisher.BaseSubscriber;
@@ -21,9 +21,9 @@ import reactor.core.scheduler.Scheduler;
  *
  * @author Siwen Yu
  * @since 1.0.0
- * @param <T> Event
+ * @param <T> Task
  */
-class InnerSubscriber<T extends Event> extends BaseSubscriber<EventEnvelope<T>> {
+class InnerSubscriber<T extends Task> extends BaseSubscriber<TaskWrapper<T>> {
 
     /**
      * Logger
@@ -31,9 +31,9 @@ class InnerSubscriber<T extends Event> extends BaseSubscriber<EventEnvelope<T>> 
     private static final Logger LOG = LoggerFactory.getLogger(InnerSubscriber.class);
 
     /**
-     * EventContextHandler
+     * TaskContextHandler
      */
-    private final EventContextHandler contextHandler;
+    private final TaskContextHandler contextHandler;
     /**
      * Handler
      */
@@ -55,7 +55,7 @@ class InnerSubscriber<T extends Event> extends BaseSubscriber<EventEnvelope<T>> 
      */
     private final Function<T, Mono<TransactionResult>> deleteCommand;
 
-    InnerSubscriber(EventContextHandler contextHandler, Function<T, Mono<Boolean>> handler, int parallelism,
+    InnerSubscriber(TaskContextHandler contextHandler, Function<T, Mono<Boolean>> handler, int parallelism,
         StatefulRedisConnection<String, String> pollingConnection, Scheduler handlerScheduler,
         Function<T, Mono<TransactionResult>> deleteCommand) {
         this.contextHandler = contextHandler;
@@ -72,8 +72,8 @@ class InnerSubscriber<T extends Event> extends BaseSubscriber<EventEnvelope<T>> 
     }
 
     @Override
-    protected void hookOnNext(@NotNull EventEnvelope<T> envelope) {
-        LOG.debug("event [{}] received from queue", envelope);
+    protected void hookOnNext(@NotNull TaskWrapper<T> envelope) {
+        LOG.debug("task [{}] received from queue", envelope);
 
         Mono<Boolean> promise;
 
@@ -91,10 +91,10 @@ class InnerSubscriber<T extends Event> extends BaseSubscriber<EventEnvelope<T>> 
         }
 
         promise.defaultIfEmpty(Boolean.FALSE)
-            .doOnError(e -> LOG.warn("error occurred during handling event [{}]", envelope, e))
+            .doOnError(e -> LOG.warn("error occurred during handling task [{}]", envelope, e))
             .onErrorReturn(Boolean.FALSE).flatMap(completed -> {
                 if (TRUE.equals(completed)) {
-                    LOG.debug("deleting event {} from delayed queue", envelope.getPayload());
+                    LOG.debug("deleting task {} from delayed queue", envelope.getPayload());
                     // todo we could also fail here!!! test me! with latch and toxyproxy
                     return deleteCommand.apply(envelope.getPayload()).map(r -> TRUE);
                 } else {
@@ -102,7 +102,7 @@ class InnerSubscriber<T extends Event> extends BaseSubscriber<EventEnvelope<T>> 
                 }
             }).subscribeOn(handlerScheduler)
             .subscriberContext(c -> contextHandler.subscriptionContext(c, envelope.getLogContext())).subscribe(r -> {
-                LOG.debug("event processing completed [{}]", envelope);
+                LOG.debug("task processing completed [{}]", envelope);
                 requestInner(1);
             });
     }
