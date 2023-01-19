@@ -4,6 +4,7 @@
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/yusiwen/commons-queue/graphs/commit-activity)
 [![GitHub tag](https://img.shields.io/github/tag/yusiwen/commons-queue.svg)](https://GitHub.com/yusiwen/commons-queue/tags/)
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/cn.yusiwen.commons/commons-queue/badge.svg)](https://maven-badges.herokuapp.com/maven-central/cn.yusiwen.commons/commons-queue)
+[![Build Status](https://ci-github.yusiwen.cn/api/badges/yusiwen/commons-queue/status.svg)](https://ci-github.yusiwen.cn/yusiwen/commons-queue)
 
 My common queue library implements queue operations. 
 
