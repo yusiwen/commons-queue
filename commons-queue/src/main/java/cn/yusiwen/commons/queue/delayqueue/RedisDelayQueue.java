@@ -192,19 +192,19 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
          */
         private final Function<T, Mono<Boolean>> handler;
         /**
-         * Parallelism
+         * Prefetch for request, adjust it for backpressure
          */
-        private final int parallelism;
+        private final int prefetch;
         /**
          * Subscription
          */
         private final Disposable subscription;
 
-        private HandlerAndSubscription(Class<T> type, Function<T, Mono<Boolean>> handler, int parallelism,
+        private HandlerAndSubscription(Class<T> type, Function<T, Mono<Boolean>> handler, int prefetch,
             Disposable subscription) {
             this.type = type;
             this.handler = handler;
-            this.parallelism = parallelism;
+            this.prefetch = prefetch;
             this.subscription = subscription;
         }
     }
@@ -377,15 +377,15 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
 
     @Override
     public <T extends Task> void addTaskHandler(@NotNull Class<T> taskType,
-        @NotNull Function<@NotNull T, @NotNull Mono<Boolean>> handler, int parallelism) {
+        @NotNull Function<@NotNull T, @NotNull Mono<Boolean>> handler, int prefetch) {
         requireNonNull(taskType, "task type");
         requireNonNull(handler, "handler");
-        checkInRange(parallelism, 1, 100, "parallelism");
+        checkInRange(prefetch, 1, 100, "prefetch");
 
         subscriptions.computeIfAbsent(taskType, re -> {
-            InnerSubscriber<T> subscription = createSubscription(taskType, handler, parallelism);
+            InnerSubscriber<T> subscription = createSubscription(taskType, handler, prefetch);
             metrics.registerReadyToProcessSupplier(taskType, () -> metricsCommands.llen(toQueueName(taskType)));
-            return new HandlerAndSubscription<>(taskType, handler, parallelism, subscription);
+            return new HandlerAndSubscription<>(taskType, handler, prefetch, subscription);
         });
     }
 
@@ -417,8 +417,8 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
 
     private <T extends Task> HandlerAndSubscription<T> createNewSubscription(HandlerAndSubscription<T> old) {
         LOG.info("refreshing subscription for [{}]", old.type.getName());
-        return new HandlerAndSubscription<>(old.type, old.handler, old.parallelism,
-            createSubscription(old.type, old.handler, old.parallelism));
+        return new HandlerAndSubscription<>(old.type, old.handler, old.prefetch,
+            createSubscription(old.type, old.handler, old.prefetch));
     }
 
     /**
@@ -476,9 +476,9 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
     }
 
     private <T extends Task> InnerSubscriber<T> createSubscription(Class<T> taskType,
-        Function<T, Mono<Boolean>> handler, int parallelism) {
+        Function<T, Mono<Boolean>> handler, int prefetch) {
         StatefulRedisConnection<String, String> pollingConnection = client.connect();
-        InnerSubscriber<T> subscription = new InnerSubscriber<>(contextHandler, handler, parallelism, pollingConnection,
+        InnerSubscriber<T> subscription = new InnerSubscriber<>(contextHandler, handler, prefetch, pollingConnection,
             handlerScheduler, this::removeFromDelayedQueue);
         String queue = toQueueName(taskType);
 
@@ -494,8 +494,8 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
                 pollingConnection.reset();
             }).onErrorReturn(KeyValue.empty(taskType.getName())), 1, // it doesn't make sense to do requests on single
                                                                      // connection in parallel
-                parallelism)
-            .publishOn(handlerScheduler, parallelism).defaultIfEmpty(KeyValue.empty(queue)).filter(Value::hasValue)
+                    prefetch)
+            .publishOn(handlerScheduler, prefetch).defaultIfEmpty(KeyValue.empty(queue)).filter(Value::hasValue)
             .doOnNext(v -> metrics.incrementDequeueCounter(taskType)).map(Value::getValue)
             .map(v -> deserialize(taskType, v)).onErrorContinue((e, r) -> LOG.warn("Unable to deserialize [{}]", r, e))
             .subscribe(subscription);

@@ -268,7 +268,7 @@ class RedisDelayQueueTest {
         // given
         final int total = 20;
         final int timeout = 500;
-        final int parallelism = 10;
+        final int prefetch = 10;
         CountDownLatch latch = new CountDownLatch(20);
 
         eventService.addTaskHandler(DummyTask.class, e -> Mono.fromCallable(() -> {
@@ -279,14 +279,14 @@ class RedisDelayQueueTest {
             } catch (InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
-        }), parallelism);
+        }), prefetch);
         // and events are enqueued
         enqueue(total).block();
         assertEventsCount(total);
         // when
         eventService.dispatchDelayedTasks();
-        // then task execution takes 500, 20 should complete in 1000 (with parallelism of 10), 100 ms as reserve
-        assertThat(latch.await(total / parallelism * timeout + 100, MILLISECONDS), equalTo(true));
+        // then task execution takes 500, 20 should complete in 1000 (with prefetch of 10), 100 ms as reserve
+        assertThat(latch.await(total / prefetch * timeout + 100, MILLISECONDS), equalTo(true));
     }
 
     @Test

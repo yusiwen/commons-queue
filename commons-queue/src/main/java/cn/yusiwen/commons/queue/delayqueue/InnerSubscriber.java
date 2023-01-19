@@ -39,9 +39,9 @@ class InnerSubscriber<T extends Task> extends BaseSubscriber<TaskWrapper<T>> {
      */
     private final Function<T, Mono<Boolean>> handler;
     /**
-     * Parallelism
+     * Prefetch for request
      */
-    private final int parallelism;
+    private final int prefetch;
     /**
      * StatefulRedisConnection for polling
      */
@@ -55,12 +55,12 @@ class InnerSubscriber<T extends Task> extends BaseSubscriber<TaskWrapper<T>> {
      */
     private final Function<T, Mono<TransactionResult>> deleteCommand;
 
-    InnerSubscriber(TaskContextHandler contextHandler, Function<T, Mono<Boolean>> handler, int parallelism,
+    InnerSubscriber(TaskContextHandler contextHandler, Function<T, Mono<Boolean>> handler, int prefetch,
         StatefulRedisConnection<String, String> pollingConnection, Scheduler handlerScheduler,
         Function<T, Mono<TransactionResult>> deleteCommand) {
         this.contextHandler = contextHandler;
         this.handler = handler;
-        this.parallelism = parallelism;
+        this.prefetch = prefetch;
         this.pollingConnection = pollingConnection;
         this.handlerScheduler = handlerScheduler;
         this.deleteCommand = deleteCommand;
@@ -68,7 +68,7 @@ class InnerSubscriber<T extends Task> extends BaseSubscriber<TaskWrapper<T>> {
 
     @Override
     protected void hookOnSubscribe(@NotNull Subscription subscription) {
-        requestInner(parallelism);
+        requestInner(prefetch);
     }
 
     @Override
