@@ -4,7 +4,7 @@
     <parent>
         <groupId>cn.yusiwen.commons</groupId>
         <artifactId>commons-queue-parent</artifactId>
-        <version>1.0.1-SNAPSHOT</version>
+        <version>1.0.1</version>
     </parent>
     <artifactId>commons-queue-demo</artifactId>
     <dependencies>
