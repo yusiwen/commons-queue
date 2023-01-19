@@ -377,7 +377,7 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
 
     @Override
     public <T extends Task> void addTaskHandler(@NotNull Class<T> taskType,
-                                                @NotNull Function<@NotNull T, @NotNull Mono<Boolean>> handler, int parallelism) {
+        @NotNull Function<@NotNull T, @NotNull Mono<Boolean>> handler, int parallelism) {
         requireNonNull(taskType, "task type");
         requireNonNull(handler, "handler");
         checkInRange(parallelism, 1, 100, "parallelism");
@@ -493,7 +493,7 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
                 }
                 pollingConnection.reset();
             }).onErrorReturn(KeyValue.empty(taskType.getName())), 1, // it doesn't make sense to do requests on single
-                                                                      // connection in parallel
+                                                                     // connection in parallel
                 parallelism)
             .publishOn(handlerScheduler, parallelism).defaultIfEmpty(KeyValue.empty(queue)).filter(Value::hasValue)
             .doOnNext(v -> metrics.incrementDequeueCounter(taskType)).map(Value::getValue)
