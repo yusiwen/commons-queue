@@ -14,6 +14,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +33,7 @@ import cn.yusiwen.commons.queue.delayqueue.context.NoopTaskContextHandler;
 import cn.yusiwen.commons.queue.delayqueue.context.TaskContextHandler;
 import cn.yusiwen.commons.queue.delayqueue.metrics.Metrics;
 import cn.yusiwen.commons.queue.delayqueue.metrics.NoopMetrics;
+import cn.yusiwen.commons.queue.delayqueue.util.DateUtils;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.lettuce.core.KeyValue;
 import io.lettuce.core.Limit;
@@ -395,8 +397,38 @@ public class RedisDelayQueue implements DelayQueue, Closeable {
         requireNonNull(delay, "delay");
         requireNonNull(task.getId(), "task id");
 
+        if (delay.getSeconds() < 0) {
+            throw new IllegalArgumentException("invalid trigger time");
+        }
+
         return Mono.subscriberContext().flatMap(ctx -> enqueueInner(task, delay, contextHandler.taskContext(ctx)))
             .then();
+    }
+
+    @Override
+    public <T extends Task> Mono<Void> enqueue(@NotNull T task, @NotNull LocalDateTime triggerTime) {
+        requireNonNull(task, "task");
+        requireNonNull(triggerTime, "triggerTime");
+        requireNonNull(task.getId(), "task id");
+
+        Duration delay = DateUtils.getExpiration(triggerTime);
+        if (delay.getSeconds() < 0) {
+            throw new IllegalArgumentException("invalid trigger time");
+        }
+        return enqueue(task, delay);
+    }
+
+    @Override
+    public <T extends Task> Mono<Void> enqueue(@NotNull T task, @NotNull String triggerCron) {
+        requireNonNull(task, "task");
+        requireNonNull(triggerCron, "triggerCron");
+        requireNonNull(task.getId(), "task id");
+
+        Duration delay = DateUtils.getExpiration(DateUtils.convertCron(triggerCron));
+        if (delay.getSeconds() < 0) {
+            throw new IllegalArgumentException("invalid crontab: " + triggerCron);
+        }
+        return enqueue(task, delay);
     }
 
     @Override

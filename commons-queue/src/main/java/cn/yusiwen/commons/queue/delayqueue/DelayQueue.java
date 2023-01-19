@@ -1,6 +1,7 @@
 package cn.yusiwen.commons.queue.delayqueue;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
@@ -49,4 +50,24 @@ public interface DelayQueue {
      * @return A {@code Mono<Void>} which only replays complete and error signals
      */
     <T extends Task> Mono<Void> enqueue(@NotNull T task, @NotNull Duration delay);
+
+    /**
+     * Add task into delay queue with a given trigger time
+     *
+     * @param task Task
+     * @param triggerTime Date of trigger
+     * @param <T> Task type
+     * @return A {@code Mono<Void>} which only replays complete and error signals
+     */
+    <T extends Task> Mono<Void> enqueue(@NotNull T task, @NotNull LocalDateTime triggerTime);
+
+    /**
+     * Add task into delay queue with a given crontab of trigger
+     *
+     * @param task Task
+     * @param triggerCron Crontab of trigger
+     * @param <T> Task type
+     * @return A {@code Mono<Void>} which only replays complete and error signals
+     */
+    <T extends Task> Mono<Void> enqueue(@NotNull T task, @NotNull String triggerCron);
 }

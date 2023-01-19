@@ -39,14 +39,24 @@ public class Demo {
         @JsonProperty
         private final String id;
 
-        @ConstructorProperties({"id"})
-        private DemoTask(String id) {
+        /**
+         * Name
+         */
+        private final String name;
+
+        @ConstructorProperties({"id", "name"})
+        private DemoTask(String id, String name) {
             this.id = id;
+            this.name = name;
         }
 
         @Override
         public String getId() {
             return id;
+        }
+
+        public String getName() {
+            return name;
         }
 
         @Override
@@ -58,12 +68,12 @@ public class Demo {
                 return false;
             }
             DemoTask that = (DemoTask)o;
-            return Objects.equals(id, that.id);
+            return Objects.equals(id, that.id) && Objects.equals(name, that.name);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(id);
+            return Objects.hash(id) * Objects.hash(name);
         }
     }
 
@@ -138,15 +148,19 @@ public class Demo {
 
     public void start() {
         queue.addTaskHandler(DemoTask.class, e -> Mono.fromCallable(() -> {
-            LOG.info("DemoTask received, id = {}", e.getId());
+            LOG.info("DemoTask received, id = {}, name = {}", e.getId(), e.getName());
             return TRUE;
         }), 1);
         LOG.info("DemoEvent1 enqueue");
-        queue.enqueue(new DemoTask("1"), Duration.ofSeconds(10)).subscribe();
+        queue.enqueue(new DemoTask("1", "DemoTask1"), Duration.ofSeconds(0)).subscribe();
         LOG.info("DemoEvent2 enqueue");
-        queue.enqueue(new DemoTask("2"), Duration.ofSeconds(15)).subscribe();
+        queue.enqueue(new DemoTask("2", "DemoTask2"), Duration.ofSeconds(5)).subscribe();
         LOG.info("DemoEvent3 enqueue");
-        queue.enqueue(new DemoTask("3"), Duration.ofSeconds(20)).subscribe();
+        queue.enqueue(new DemoTask("3", "DemoTask3"), Duration.ofSeconds(10)).subscribe();
+        LOG.info("DemoEvent4 enqueue");
+        queue.enqueue(new DemoTask("4", "DemoTask4"), Duration.ofSeconds(15)).subscribe();
+        LOG.info("DemoEvent5 enqueue");
+        queue.enqueue(new DemoTask("5", "DemoTask5"), Duration.ofSeconds(20)).subscribe();
     }
 
     public static void main(String[] args) {

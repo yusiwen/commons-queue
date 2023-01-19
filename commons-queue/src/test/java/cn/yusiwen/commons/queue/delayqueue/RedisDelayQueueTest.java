@@ -475,7 +475,7 @@ class RedisDelayQueueTest {
 
     @Test
     void shouldNotAllowToEnqueueNulls() {
-        assertThrows(NullPointerException.class, () -> eventService.enqueue(new DummyTask("1"), null));
+        assertThrows(NullPointerException.class, () -> eventService.enqueue(new DummyTask("1"), (Duration)null));
         assertThrows(NullPointerException.class, () -> eventService.enqueue(null, Duration.ZERO));
         assertThrows(NullPointerException.class, () -> eventService.enqueue(new DummyTask(null), Duration.ZERO));
     }
