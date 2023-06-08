@@ -103,6 +103,7 @@ public class MemoryLimiter {
     /**
      * Locks to prevent both acquires and releases.
      */
+    @SuppressWarnings("PMD.LockShouldWithTryFinallyRule")
     private void fullyLock() {
         acquireLock.lock();
         releaseLock.lock();
