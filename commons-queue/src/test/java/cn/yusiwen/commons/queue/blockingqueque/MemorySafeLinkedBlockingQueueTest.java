@@ -12,10 +12,10 @@ import org.junit.jupiter.api.Test;
 import cn.yusiwen.commons.queue.blockingqueue.MemoryLimitCalculator;
 import cn.yusiwen.commons.queue.blockingqueue.MemorySafeLinkedBlockingQueue;
 
-public class MemorySafeLinkedBlockingQueueTest {
+class MemorySafeLinkedBlockingQueueTest {
 
     @Test
-    public void test() throws Exception {
+    void test() {
         ByteBuddyAgent.install();
         final Instrumentation instrumentation = ByteBuddyAgent.getInstrumentation();
         final long objectSize = instrumentation.getObjectSize((Runnable)() -> {

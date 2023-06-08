@@ -13,6 +13,8 @@ The purpose of the library is to provide higher-level abstractions of queue oper
 ## Features
 
 - DelayQueue implemented by [Redis](https://redis.io/) [sorted set](https://redis.io/docs/data-types/sorted-sets/)
+- MemoryLimitedLinkedBlockingQueue: LinkedBlockingQueue with limited memory footprint
+- MemorySafeLinkedBlockingQueue: Memory safe LinkedBlockingQueue
 
 ## Usages
 
@@ -20,7 +22,7 @@ The purpose of the library is to provide higher-level abstractions of queue oper
 <dependency>
     <groupId>cn.yusiwen.commons</groupId>
     <artifactId>commons-queue</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
@@ -62,3 +64,11 @@ queue.enqueue(new DemoTask("1"), Duration.ofSeconds(10)).subscribe();
 The `DemoTask` will be triggered in 10 seconds.
 
 More details in [Demo.java](https://github.com/yusiwen/commons-queue/blob/master/commons-queue-demo/src/main/java/cn/yusiwen/commons/queue/delayqueue/Demo.java)
+
+### MemoryLimitedLinkedBlockingQueue and MemorySafeLinkedBlockingQueue
+
+```java
+MemorySafeLinkedBlockingQueue<MyData> queue = new MemorySafeLinkedBlockingQueue<>(maxFreeMemory);
+
+MemoryLimitedLinkedBlockingQueue<MyData> queue = new MemoryLimitedLinkedBlockingQueue<>(memoryLimit, instrumentation)
+```
