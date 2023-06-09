@@ -74,4 +74,11 @@ public class MemoryLimitCalculator {
         return (long)(maxAvailable() * 0.8);
     }
 
+    /**
+     * Manually shutdown
+     */
+    public static void shutdown() {
+        SCHEDULER.shutdown();
+    }
+
 }
