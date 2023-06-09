@@ -85,7 +85,7 @@ public class MemoryLimiter {
     private void signalNotEmpty() {
         releaseLock.lock();
         try {
-            notEmpty.signalAll();
+            notEmpty.signal();
         } finally {
             releaseLock.unlock();
         }
@@ -94,7 +94,7 @@ public class MemoryLimiter {
     private void signalNotLimited() {
         acquireLock.lock();
         try {
-            notLimited.signalAll();
+            notLimited.signal();
         } finally {
             acquireLock.unlock();
         }
