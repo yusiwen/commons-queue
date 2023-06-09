@@ -1,26 +1,42 @@
 package cn.yusiwen.commons.queue.blockingqueue;
 
-import net.bytebuddy.agent.ByteBuddyAgent;
-
 import java.lang.instrument.Instrumentation;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import net.bytebuddy.agent.ByteBuddyAgent;
+
 public class Demo {
 
+    /**
+     * Lock
+     */
     private final ReentrantLock acquireLock = new ReentrantLock();
 
     /**
      * Condition of not limited
      */
     private final Condition shutdown = acquireLock.newCondition();
+
+    /**
+     * CountDownLatch
+     */
+    private final CountDownLatch latch = new CountDownLatch(3);
+
+    /**
+     * Shutdown flag
+     */
     private boolean isShutdown = false;
 
-    CountDownLatch latch = new CountDownLatch(3);
-
-    void log(String msg) {
+    static void log(String msg) {
+        // CHECKSTYLE:OFF
         System.out.println(Thread.currentThread() + ": " + msg);
+        // CHECKSTYLE:ON
     }
 
     void doInThread() {
@@ -32,7 +48,9 @@ public class Demo {
                 shutdown.await();
             }
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            log("interrupted");
+            // Restore interrupted state...
+            Thread.currentThread().interrupt();
         } finally {
             acquireLock.unlock();
         }
@@ -41,15 +59,10 @@ public class Demo {
     }
 
     void doWork() throws InterruptedException {
-        int maxFreeMemory = (int) MemoryLimitCalculator.maxAvailable();
+        int maxFreeMemory = (int)MemoryLimitCalculator.maxAvailable();
         MemorySafeLinkedBlockingQueue<Runnable> queue = new MemorySafeLinkedBlockingQueue<>(maxFreeMemory);
-        ExecutorService es = new ThreadPoolExecutor(2, 2, 500, TimeUnit.MILLISECONDS,
-                queue,
-                Executors.defaultThreadFactory(), (r, executor) -> {
-            log("Task " + r.toString() +
-                    " rejected from " +
-                    executor.toString());
-        });
+        ExecutorService es = new ThreadPoolExecutor(2, 2, 500, TimeUnit.MILLISECONDS, queue,
+            Executors.defaultThreadFactory(), (r, executor) -> log("Task " + r + " rejected from " + executor));
 
         // Make core threads busy
         log("add 2 task to make core threads busy");
@@ -63,7 +76,7 @@ public class Demo {
 
         ByteBuddyAgent.install();
         final Instrumentation instrumentation = ByteBuddyAgent.getInstrumentation();
-        final long objectSize = instrumentation.getObjectSize((Runnable) this::doInThread);
+        final long objectSize = instrumentation.getObjectSize((Runnable)this::doInThread);
         // Set max available memory to make more available slot for one task
         log("set new max available memory");
         queue.setMaxFreeMemory((int)(MemoryLimitCalculator.maxAvailable() - objectSize));
@@ -93,7 +106,9 @@ public class Demo {
         try {
             demo.doWork();
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            log("interrupted");
+            // Restore interrupted state...
+            Thread.currentThread().interrupt();
         }
     }
 }
