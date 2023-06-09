@@ -82,6 +82,7 @@ public class MemoryLimiter {
         return getMemoryLimit() - getCurrentMemory();
     }
 
+    @SuppressFBWarnings("MDM_SIGNAL_NOT_SIGNALALL") // Only one thread will awake on this condition
     private void signalNotEmpty() {
         releaseLock.lock();
         try {
@@ -91,6 +92,7 @@ public class MemoryLimiter {
         }
     }
 
+    @SuppressFBWarnings("MDM_SIGNAL_NOT_SIGNALALL") // Only one thread will awake on this condition
     private void signalNotLimited() {
         acquireLock.lock();
         try {
