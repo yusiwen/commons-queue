@@ -22,7 +22,7 @@ The purpose of the library is to provide higher-level abstractions of queue oper
 <dependency>
     <groupId>cn.yusiwen.commons</groupId>
     <artifactId>commons-queue</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.2.1</version>
 </dependency>
 ```
 
@@ -72,3 +72,5 @@ MemorySafeLinkedBlockingQueue<MyData> queue = new MemorySafeLinkedBlockingQueue<
 
 MemoryLimitedLinkedBlockingQueue<MyData> queue = new MemoryLimitedLinkedBlockingQueue<>(memoryLimit, instrumentation)
 ```
+
+See [Demo.java](https://github.com/yusiwen/commons-queue/blob/master/commons-queue-demo/src/main/java/cn/yusiwen/commons/queue/blockingqueue/Demo.java) for more details.
