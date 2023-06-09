@@ -10,7 +10,7 @@
     </parent>
     <groupId>cn.yusiwen.commons</groupId>
     <artifactId>commons-queue-parent</artifactId>
-    <version>1.0.3-SNAPSHOT</version>
+    <version>1.0.2.1</version>
     <description>Parent pom for commons-queue</description>
     <url>https://github.com/yusiwen/commons-queue</url>
     <inceptionYear>2022</inceptionYear>
@@ -44,6 +44,6 @@
         <connection>scm:git:ssh://git@github.com/yusiwen/commons-queue.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/yusiwen/commons-queue.git</developerConnection>
         <url>https://github.com/yusiwen/java-base-parent</url>
-        <tag>HEAD</tag>
+        <tag>v1.0.2.1</tag>
     </scm>
 </project>
